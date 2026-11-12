@@ -19,13 +19,21 @@ r_files <- c(list.files("app", pattern = "\\.R$", recursive = TRUE, full.names =
 invisible(lapply(r_files, parse, encoding = "UTF-8"))
 lock <- jsonlite::read_json("app/renv.lock", simplifyVector = FALSE)
 stopifnot(identical(lock$R$Version, "4.5.2"))
+if (is.null(lock$Packages$renv$Version) || package_version(lock$Packages$renv$Version) < "1.1.0") {
+  stop("Regenerate app/renv.lock with scripts/write_dependency_lock.R and renv >= 1.1.0.")
+}
 db <- installed.packages()
 for (package in names(lock$Packages)) {
   record <- lock$Packages[[package]]
   stopifnot(identical(record$Package, package), identical(record$Source, "Repository"),
-    identical(record$Repository, "CRAN"), identical(record$Version, packageDescription(package)$Version))
+    identical(record$Repository, "CRAN"),
+    all(c("Title", "Description", "License") %in% names(record)))
+  if (package == "renv") next  # Needed to write the lock, not to run the app.
+  description <- packageDescription(package)
+  expected_fields <- intersect(c("Depends", "Imports", "LinkingTo", "SystemRequirements", "NeedsCompilation"), names(description))
+  stopifnot(identical(record$Version, description$Version), all(expected_fields %in% names(record)))
 }
-deps <- tools::package_dependencies(names(lock$Packages), db = db, recursive = TRUE)
+deps <- tools::package_dependencies(setdiff(names(lock$Packages), "renv"), db = db, recursive = TRUE)
 needed <- unique(unlist(deps, use.names = FALSE))
 base <- rownames(db)[!is.na(db[, "Priority"]) & db[, "Priority"] == "base"]
 stopifnot(all(needed %in% c("R", base, names(lock$Packages))))

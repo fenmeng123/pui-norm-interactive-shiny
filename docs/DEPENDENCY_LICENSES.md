@@ -56,6 +56,7 @@ The table lists the licenses of the R packages recorded in [the app lockfile](..
 | rappdirs | 0.3.4 | MIT + file LICENSE |
 | RColorBrewer | 1.1-3 | Apache License 2.0 |
 | Rcpp | 1.1.1 | GPL (>= 2) |
+| renv | 1.3.1 | MIT + file LICENSE |
 | rlang | 1.1.7 | MIT + file LICENSE |
 | rmarkdown | 2.30 | GPL-3 |
 | S7 | 0.2.2 | MIT + file LICENSE |
