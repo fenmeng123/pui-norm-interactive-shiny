@@ -1,0 +1,37 @@
+# Synthetic-only checks of the localized Excel output and consent gate.
+if (.Platform$OS.type == "windows") invisible(Sys.setlocale("LC_CTYPE", ".UTF-8"))
+library(shiny)
+source("app/R/predict_pui.R", encoding = "UTF-8")
+model_asset <- load_pui_prediction_asset("app/models/pui_prediction_v1.rds")
+server <- function(input, output, session) {
+  language <- reactive(if (identical(input$app_language, "en")) "en" else "zh")
+  consent_granted <- reactiveVal(FALSE)
+  source("app/components/batch_server.R", local = TRUE, encoding = "UTF-8")
+}
+input_path <- tempfile(fileext = ".xlsx")
+example <- data.frame(age = c(9, 14.5, 18), sex = c("Female", "Male", "Female"), score = c(17, 36, 85), note = c("A", "B", "C"))
+names(example)[4] <- "Participant ID"
+openxlsx::write.xlsx(example, input_path)
+testServer(server, {
+  session$setInputs(app_language = "zh", batch_file = data.frame(name = "example.xlsx", size = file.info(input_path)$size, type = "", datapath = input_path))
+  stopifnot(inherits(try(batch_review(), silent = TRUE), "try-error"))
+  consent_granted(TRUE)
+  session$flushReact()
+  stopifnot(isTRUE(batch_review()$ok))
+  expected <- predict_pui(model_asset, example$age, example$sex, example$score)$percentile
+  zh <- as.data.frame(readxl::read_excel(output$batch_download, .name_repair = "minimal"), check.names = FALSE)
+  stopifnot(identical(names(zh), c(names(example), "百分位常模分")))
+  stopifnot(isTRUE(all.equal(zh[names(example)], example, check.attributes = FALSE)))
+  stopifnot(isTRUE(all.equal(zh[["百分位常模分"]], expected, tolerance = 1e-12)))
+  session$setInputs(app_language = "en")
+  en <- as.data.frame(readxl::read_excel(output$batch_download, .name_repair = "minimal"), check.names = FALSE)
+  stopifnot(identical(names(en), c(names(example), "Normative percentile")))
+  stopifnot(isTRUE(all.equal(en[names(example)], example, check.attributes = FALSE)))
+  stopifnot(isTRUE(all.equal(en[["Normative percentile"]], expected, tolerance = 1e-12)))
+  stopifnot(identical(input$batch_file$datapath, input_path))
+  consent_granted(FALSE)
+  session$flushReact()
+  stopifnot(inherits(try(output$batch_download, silent = TRUE), "try-error"))
+})
+unlink(input_path)
+cat("Bilingual Excel headers, input retention, same scores and consent gate: PASS\n")
